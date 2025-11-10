@@ -13,6 +13,7 @@ class Program
     private static string FtpHost;
     private static string FtpUsername;
     private static string FtpPassword;
+    private static readonly string RemoteDirectory = "/screenshots"; // Path relative to user's home
     private static readonly string LocalSaveDirectory = Path.Combine(Path.GetTempPath(), "Screenshots");
     private static readonly string LogFile = Path.Combine(Path.GetTempPath(), "ScreenshotUploader.log");
 
@@ -30,17 +31,17 @@ class Program
         FtpUsername = Configuration["FtpSettings:FtpUsername"];
         FtpPassword = Configuration["FtpSettings:FtpPassword"];
 
+        Console.WriteLine("Screenshot Uploader Started. Press any key to exit.");
         Directory.CreateDirectory(LocalSaveDirectory);
 
-        Console.WriteLine("Screenshot Uploader Started. Press any key to exit.");
-        Log("Application started.");
+        // NEW STEP: Ensure the target directory exists on the FTP server once at startup
+        EnsureDirectoryExistsFtp(FtpHost, RemoteDirectory, FtpUsername, FtpPassword);
 
         aTimer = new System.Timers.Timer(60000); // 60 seconds
         aTimer.Elapsed += OnTimedEvent;
         aTimer.AutoReset = true;
         aTimer.Enabled = true;
 
-        // Keep the console window open
         Console.ReadKey();
     }
 
@@ -50,14 +51,18 @@ class Program
         {
             string filePath = CaptureScreenAndSave(LocalSaveDirectory);
             Console.WriteLine($"Screenshot saved to {filePath}");
-            string remoteUri = $"{FtpHost}/screenshots/{Path.GetFileName(filePath)}";
+
+            // Correct URI construction: FtpHost + RemoteDirectory + FileName
+            string remoteUri = $"{FtpHost}{RemoteDirectory}/{Path.GetFileName(filePath)}";
+
+            // Log the URI for debugging
+            Console.WriteLine($"Attempting to upload to: {remoteUri}");
+
             UploadFileFtp(filePath, remoteUri, FtpUsername, FtpPassword);
         }
         catch (Exception ex)
         {
-            string errorMessage = $"An error occurred: {ex.ToString()}";
-            Console.WriteLine(errorMessage);
-            Log(errorMessage);
+            Console.WriteLine($"An error occurred: {ex.Message}");
         }
     }
 
@@ -105,24 +110,45 @@ class Program
         }
         catch (Exception ex)
         {
-            string errorMessage = $"FTP Upload Failed: {ex.ToString()}";
-            Console.WriteLine(errorMessage);
-            Log(errorMessage);
-            // Rethrow the exception to be caught by the main event handler's catch block.
-            throw;
+            // Specifically check for 553, though the fix should resolve it
+            if (ex.Message.Contains("(553)"))
+            {
+                Console.WriteLine("CRITICAL: 553 Error persists. Check file name for invalid characters or server-side write permissions.");
+            }
+            Console.WriteLine($"FTP Upload Failed: {ex.Message}");
         }
     }
 
-    private static void Log(string message)
+    private static void EnsureDirectoryExistsFtp(string host, string directory, string username, string password)
     {
+        string directoryUri = $"{host}{directory}";
         try
         {
-            string logMessage = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - {message}";
-            File.AppendAllText(LogFile, logMessage + Environment.NewLine);
+            FtpWebRequest request = (FtpWebRequest)WebRequest.Create(directoryUri);
+            request.Method = WebRequestMethods.Ftp.MakeDirectory;
+            request.Credentials = new NetworkCredential(username, password);
+
+            using (FtpWebResponse response = (FtpWebResponse)request.GetResponse())
+            {
+                Console.WriteLine($"FTP Directory '{directory}' created successfully. Status: {response.StatusDescription}");
+            }
         }
-        catch
+        catch (WebException ex)
         {
-            // If logging fails, there's not much else to do.
+            FtpWebResponse response = ex.Response as FtpWebResponse;
+            // 550 usually means the directory already exists or permission denied
+            if (response != null && response.StatusCode == FtpStatusCode.ActionNotTakenFileUnavailable)
+            {
+                Console.WriteLine($"FTP Directory '{directory}' likely already exists or permissions denied (550). Proceeding.");
+            }
+            else
+            {
+                Console.WriteLine($"Error creating directory {directory}: {ex.Message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Unexpected error in directory check: {ex.Message}");
         }
     }
 }
