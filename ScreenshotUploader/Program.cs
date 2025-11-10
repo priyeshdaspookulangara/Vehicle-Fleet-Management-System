@@ -3,7 +3,6 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Net;
-using System.Threading;
 using System.Timers;
 using System.Windows.Forms;
 using Microsoft.Extensions.Configuration;
@@ -33,13 +32,16 @@ class Program
 
         Directory.CreateDirectory(LocalSaveDirectory);
 
+        Console.WriteLine("Screenshot Uploader Started. Press any key to exit.");
+        Log("Application started.");
+
         aTimer = new System.Timers.Timer(60000); // 60 seconds
         aTimer.Elapsed += OnTimedEvent;
         aTimer.AutoReset = true;
         aTimer.Enabled = true;
 
-        // Keep the main thread alive for the background process
-        Thread.Sleep(Timeout.Infinite);
+        // Keep the console window open
+        Console.ReadKey();
     }
 
     private static void OnTimedEvent(Object source, ElapsedEventArgs e)
@@ -47,12 +49,15 @@ class Program
         try
         {
             string filePath = CaptureScreenAndSave(LocalSaveDirectory);
+            Console.WriteLine($"Screenshot saved to {filePath}");
             string remoteUri = $"{FtpHost}/screenshots/{Path.GetFileName(filePath)}";
             UploadFileFtp(filePath, remoteUri, FtpUsername, FtpPassword);
         }
         catch (Exception ex)
         {
-            Log($"An error occurred: {ex.ToString()}");
+            string errorMessage = $"An error occurred: {ex.ToString()}";
+            Console.WriteLine(errorMessage);
+            Log(errorMessage);
         }
     }
 
@@ -92,14 +97,17 @@ class Program
 
             using (FtpWebResponse response = (FtpWebResponse)request.GetResponse())
             {
-                // Success, do nothing.
+                Console.WriteLine($"Upload File Complete, status {response.StatusDescription}");
             }
 
             File.Delete(localFilePath);
+            Console.WriteLine($"Local file {localFilePath} deleted.");
         }
         catch (Exception ex)
         {
-            Log($"FTP Upload Failed: {ex.ToString()}");
+            string errorMessage = $"FTP Upload Failed: {ex.ToString()}";
+            Console.WriteLine(errorMessage);
+            Log(errorMessage);
             // Rethrow the exception to be caught by the main event handler's catch block.
             throw;
         }
@@ -114,7 +122,7 @@ class Program
         }
         catch
         {
-            // If logging fails, there's not much else to do in a background app.
+            // If logging fails, there's not much else to do.
         }
     }
 }
