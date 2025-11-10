@@ -6,13 +6,14 @@ using System.Net;
 using System.Threading;
 using System.Timers;
 using System.Windows.Forms;
+using Microsoft.Extensions.Configuration;
 
 class Program
 {
-    // 1. Example Configuration
-    private static readonly string FtpHost = "ftp://yourserver.com";
-    private static readonly string FtpUsername = "your_username";
-    private static readonly string FtpPassword = "your_password";
+    private static IConfiguration Configuration;
+    private static string FtpHost;
+    private static string FtpUsername;
+    private static string FtpPassword;
     private static readonly string LocalSaveDirectory = Path.Combine(Path.GetTempPath(), "Screenshots");
     private static readonly string LogFile = Path.Combine(Path.GetTempPath(), "ScreenshotUploader.log");
 
@@ -20,6 +21,16 @@ class Program
 
     static void Main()
     {
+        var builder = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+
+        Configuration = builder.Build();
+
+        FtpHost = Configuration["FtpSettings:FtpHost"];
+        FtpUsername = Configuration["FtpSettings:FtpUsername"];
+        FtpPassword = Configuration["FtpSettings:FtpPassword"];
+
         Directory.CreateDirectory(LocalSaveDirectory);
 
         aTimer = new System.Timers.Timer(60000); // 60 seconds
