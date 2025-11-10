@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Net;
+using System.Threading;
 using System.Timers;
 using System.Windows.Forms;
 using Microsoft.Extensions.Configuration;
@@ -31,8 +32,8 @@ public class Program
         aTimer.AutoReset = true;
         aTimer.Enabled = true;
 
-        Console.WriteLine("Press the Enter key to exit the application...");
-        Console.ReadLine();
+        // Keep the application running in the background
+        Thread.Sleep(Timeout.Infinite);
     }
 
     private static void ConfigureServices(IServiceCollection services)
